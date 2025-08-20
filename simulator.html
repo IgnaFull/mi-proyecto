@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador de Etiquetas eTag</title>
+    <style>
+        .etiqueta {
+            width: 300px;
+            height: 150px;
+            border: 2px solid #333;
+            margin: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            display: inline-block;
+            font-family: monospace;
+        }
+        .screen {
+            background: #333;
+            color: #0f0;
+            padding: 10px;
+            height: 100px;
+            overflow: hidden;
+        }
+        .offline { background: #ffcccc; }
+        .online { background: #ccffcc; }
+    </style>
+</head>
+<body>
+    <h1>Simulador de Etiquetas ePaper</h1>
+    <button onclick="connect()">Conectar MQTT</button>
+    <button onclick="addEtiqueta()">+ Agregar Etiqueta</button>
+    
+    <div id="etiquetasContainer"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script>
+        const etiquetas = {};
+        let client = null;
+
+        function connect() {
+            // Conectar a broker MQTT público o local
+            client = mqtt.connect('wss://test.mosquitto.org:8081', {
+                clientId: 'simulator_' + Math.random().toString(16).substr(2, 8)
+            });
+
+            client.on('connect', () => {
+                console.log('✅ Conectado al Broker MQTT');
+                document.body.classList.add('online');
+            });
+
+            client.on('message', (topic, message) => {
+                const etiquetaId = topic.split('/')[1];
+                const data = JSON.parse(message.toString());
+                updateEtiqueta(etiquetaId, data);
+            });
+        }
+
+        function addEtiqueta() {
+            const etiquetaId = 'sim_' + Math.random().toString(36).substr(2, 5);
+            const div = document.createElement('div');
+            div.className = 'etiqueta';
+            div.id = etiquetaId;
+            div.innerHTML = `
+                <h3>Etiqueta: ${etiquetaId}</h3>
+                <div class="screen" id="screen_${etiquetaId}">
+                    Esperando datos...
+                </div>
+                <p>Estado: <span class="status">Desconectada</span></p>
+            `;
+            
+            document.getElementById('etiquetasContainer').appendChild(div);
+            
+            // Suscribirse al topic de esta etiqueta
+            if (client) {
+                client.subscribe(`etiquetas/${etiquetaId}/update`);
+            }
+            
+            etiquetas[etiquetaId] = {
+                element: div,
+                lastUpdate: new Date()
+            };
+        }
+
+        function updateEtiqueta(etiquetaId, data) {
+            const etiqueta = etiquetas[etiquetaId];
+            if (!etiqueta) return;
+
+            const screen = document.getElementById(`screen_${etiquetaId}`);
+            screen.innerHTML = `
+                <strong>${data.name || 'Producto'}</strong><br>
+                Precio: $${data.price || '0'}<br>
+                Oferta: ${data.promo || 'Ninguna'}<br>
+                <small>${new Date().toLocaleTimeString()}</small>
+            `;
+
+            etiqueta.lastUpdate = new Date();
+            etiqueta.element.querySelector('.status').textContent = 'Actualizada';
+        }
+
+        // Simular etiquetas automáticamente
+        for (let i = 0; i < 3; i++) {
+            setTimeout(addEtiqueta, i * 1000);
+        }
+    </script>
+</body>
+</html>
